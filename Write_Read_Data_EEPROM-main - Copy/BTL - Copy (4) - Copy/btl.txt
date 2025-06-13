@@ -1,0 +1,2 @@
+(Ghi) laptop (yêu cầu chế độ ghi, dữ liệu ghi)  -uart-> stm32 (kích hoạt WE) --> eeprom --> hiển thị led
+(Đọc) laptop (yêu cầu chế độ đọc) -uart-> stm32 (kích hoạt OE) --> eeprom (dữ liệu đọc) --> stm32 -uart-> laptop
