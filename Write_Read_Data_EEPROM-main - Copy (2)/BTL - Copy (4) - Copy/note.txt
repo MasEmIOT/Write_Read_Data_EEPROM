@@ -1,0 +1,28 @@
+I/O 0: PB10
+I/O 1: PB1
+I/O 2: PB0
+I/O 3: PA8
+I/O 4: PB15
+I/O 5: PB14
+I/O 6: PA9
+I/O 7: PA10
+
+A0-A7 : PA0,PA1,PB12,PB13,PA4,PA5,PA6,PA7
+A8 : PB11
+   111000110 >> 1 = 011100011
+& 
+   000000001
+   000000001 = 1 => A1=1
+
+WE: PA12
+OE: PA11 
+CE: PA15
+
+UART: PA2/TX, PA3/RX
+
+Khi có ngắt xảy ra, chương trình dừng hàm main lại, nhảy đến vùng nhớ chứa địa chỉ của hàm thực thi (...Handler), Hàm này đã được nhà sản xuất định nghĩa sẵn, cấp sẵn một vùng nhớ, chỉ cần cấu hình lại hàm này là được.
+
+Vcc: 5V (arduino)
+Vss: GND(arduino)
+16MHz
+/16 1MHz 1us 
