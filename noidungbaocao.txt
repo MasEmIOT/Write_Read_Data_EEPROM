@@ -1,0 +1,66 @@
+A. Lời nói đầu
+Chương 1: Giới thiệu
+1.1. Tổng quan đề tài
+Đề tài này tập trung nghiên cứu và triển khai hệ thống đọc ghi dữ liệu sử dụng vi điều khiển STM32 để điều khiển bộ nhớ EEPROM 28C04A. Khác với các EEPROM giao tiếp nối tiếp như 24C02 hay 25LC512, 28C04A là một chip EEPROM sử dụng giao tiếp song song, với hệ thống 8 chân dữ liệu (I/O0 - I/O7), 9 chân địa chỉ (A0 - A8), cùng các tín hiệu điều khiển CE (Chip Enable), OE (Output Enable) và WE (Write Enable). Việc điều khiển một thiết bị bộ nhớ song song như vậy đòi hỏi vi điều khiển phải điều phối nhiều chân GPIO hoạt động đồng bộ, đảm bảo đúng chu kỳ ghi và đọc theo yêu cầu thời gian của EEPROM. Để thực hiện điều này, đề tài sử dụng STM32F103C8T6 – một dòng vi điều khiển ARM Cortex-M3 có khả năng cấu hình linh hoạt các chân GPIO. Thay vì sử dụng giao tiếp I2C như các đề tài thông thường, hệ thống này điều khiển trực tiếp từng bit tín hiệu của EEPROM. Người dùng sẽ gửi lệnh từ máy tính thông qua giao tiếp UART, và STM32 sẽ phân tích lệnh để thực hiện ghi một byte dữ liệu vào địa chỉ mong muốn, hoặc đọc dữ liệu từ một địa chỉ bất kỳ trên EEPROM và trả kết quả về máy tính.
+Nhóm chúng em chọn đề tài này do nó mang tính thực hành cao, giúp người học trau dồi kiến thức và kỹ năng về lập trình cho các giao tiếp ngoại vi như GPIO, UART, I2C,... đặc biệt là làm việc với thanh ghi thay vì sử dụng thư viện HAL được viết sẵn cho dòng STM giúp hiểu sâu hơn về cách hoạt động của vi điều khiển.
+
+1.2. Mục tiêu của đề tài
+Mục tiêu chính của đề tài là xây dựng một hệ thống có khả năng ghi và đọc dữ liệu từ chip EEPROM 28C04A sử dụng vi điều khiển STM32. Hệ thống sẽ nhận lệnh từ người dùng thông qua giao diện UART và điều khiển các chân tín hiệu của EEPROM theo đúng trình tự được quy định trong datasheet. Đề tài cần thiết kế phần cứng phù hợp để kết nối STM32 với EEPROM theo sơ đồ chân chính xác, đồng thời lập trình để bật tắt các chân CE, OE, WE của EEPROM đúng thời điểm, tối ưu thời gian cũng như thiết lập địa chỉ và dữ liệu đúng cách. Một mục tiêu quan trọng khác là quá trình giao tiếp UART giữa vi điều khiển và máy tính, STM32 cần nhận được đúng dữ liệu từ máy tính cũng như gửi lại đúng dữ liệu của EEPROM đến máy tính.
+Chương 2: Cơ sở lý thuyết
+
+
+2.1. STM32F103C8T6
+2.1.1 GPIO
+GPIO là các chân đa năng có thể cấu hình làm ngõ vào hoặc ngõ ra số, được sử dụng để điều khiển hoặc nhận tín hiệu từ các linh kiện ngoại vi. Trong chế độ output, GPIO có thể đưa ra mức logic cao hoặc thấp để điều khiển thiết bị như LED, relay, hoặc gửi xung điều khiển. Trong chế độ input, GPIO có thể đọc trạng thái của công tắc, cảm biến hoặc tín hiệu số từ thiết bị khác. Một số vi điều khiển còn hỗ trợ chức năng ngắt (interrupt) khi tín hiệu trên GPIO thay đổi.
+GPIO là một trong những tính năng cơ bản và quan trọng nhất của bất kỳ vi điều khiển nào, và STM32F103C8T6 không phải là ngoại lệ. Với hơn 30 chân GPIO có thể cấu hình linh hoạt, STM32 cho phép các chân này hoạt động ở nhiều chế độ khác nhau: input, output push-pull, output open-drain, input với pull-up/pull-down, hay chế độ alternate function (cho UART, I2C, SPI...). Mỗi chân GPIO có thể điều khiển độc lập tốc độ chuyển mạch, mức điện áp và khả năng sinh ngắt. 
+
+[ảnh trong datasheet]
+
+Trong chế độ output, các chân GPIO được dùng để phát tín hiệu điều khiển đến các linh kiện ngoại vi như LED, relay, hoặc như trong đề tài là các tín hiệu CE, OE, WE, A0–A8, I/O0–I/O7 điều khiển EEPROM. Trong chế độ input, GPIO được dùng để đọc tín hiệu phản hồi từ cảm biến hoặc từ EEPROM khi đọc dữ liệu.
+
+
+2.1.2 UART
+UART là chuẩn giao tiếp nối tiếp không đồng bộ được STM32 tích hợp sẵn trên các chân USART1, USART2 và USART3. Chuẩn này cho phép truyền và nhận dữ liệu qua hai dây: TX và RX. UART hoạt động độc lập không cần đồng hồ chung giữa hai thiết bị, miễn sao chúng sử dụng cùng baudrate. Trong STM32F103C8T6, người dùng có thể dễ dàng cấu hình tốc độ baud (9600, 115200...), số bit dữ liệu, parity và số stop bit thông qua các thanh ghi.
+
+[ảnh trong datasheet]
+
+ Đây là giao tiếp phổ biến để truyền lệnh điều khiển từ máy tính xuống STM32 hoặc gửi kết quả xử lý ngược lại. Ngoài ra, UART còn có thể kết hợp với DMA để tăng hiệu suất truyền nhận, giảm tải cho CPU. 
+Trong đề tài này, UART đóng vai trò là kênh tương tác giữa người dùng và vi điều khiển. STM32 sử dụng UART để giao tiếp với máy tính, nhận lệnh và trả dữ liệu phản hồi. Giao thức UART giúp đơn giản hóa quá trình tương tác: người dùng gửi chuỗi lệnh, STM32 phân tích và thực hiện thao tác tương ứng, sau đó gửi lại kết quả.
+2.1.3. I2C
+I2C là chuẩn giao tiếp nối tiếp đồng bộ, hai dây (SDA, SCL), sử dụng cho việc truyền dữ liệu giữa một master và nhiều slave. Trên STM32F103C8T6, I2C1 và I2C2 thường được sử dụng, với các chân mặc định như PB6 (SCL) và PB7 (SDA) cho I2C1 giúp người dùng dễ dàng gửi lệnh hoặc dữ liệu đến thiết bị slave như LCD, EEPROM I2C, cảm biến nhiệt độ, đồng hồ thời gian thực... Cấu hình I2C cần chú ý đến địa chỉ thiết bị, tốc độ truyền và thứ tự byte khi truyền. 
+
+[ảnh trong datasheet]
+
+
+
+
+
+Trong đề tài, I2C được dùng để giao tiếp với màn hình LCD có module I2C mở rộng.
+ 
+[ảnh module I2C gắn ở LCD]
+
+Để tăng tính trực quan, đề tài tích hợp thêm màn hình LCD 16x2 hoặc 20x4 có module I2C chuyển đổi từ giao tiếp song song sang I2C. STM32 sẽ dùng I2C1 (thường là chân PB6 - SCL, PB7 - SDA) để giao tiếp với LCD. Thư viện HAL hỗ trợ đầy đủ các hàm I2C_Write để ghi dữ liệu hoặc lệnh đến địa chỉ I2C của LCD. Nội dung hiển thị có thể là trạng thái đọc/ghi, địa chỉ đang thao tác hoặc dữ liệu đang được xử lý.
+2.1.4. Timer
+
+Timer là bộ đếm nội bộ trong vi điều khiển, hoạt động dựa trên xung clock hệ thống. Timer có thể dùng để tạo độ trễ chính xác (delay), đo độ rộng xung, phát PWM hoặc định kỳ tạo ngắt. Trong nhiều hệ thống nhúng, delay chính xác theo micro giây hoặc mili giây là rất quan trọng để đảm bảo thời gian điều khiển tín hiệu đúng yêu cầu phần cứng. STM32F103C8T6 tích hợp nhiều bộ timer đa mục đích như TIM1 đến TIM4. Timer có thể dùng để tạo xung PWM, định thời, tạo delay hoặc đo độ rộng xung. Đối với bài toán điều khiển chính xác tín hiệu WE trong EEPROM, cần delay chính xác từ vài chục đến hàng nghìn micro giây. 
+
+2.2. EERPOM 28C04A
+Theo datasheet \ref{} , 28C04A là EEPROM CMOS 4Kbit (512 x 8), hoạt động với điện áp 5V, hỗ trợ tốc độ đọc nhanh (trễ truy xuất tACC từ 150 đến 250 ns) và thời gian ghi 200 µs hoặc 1 ms tùy phiên bản. Giao tiếp song song của EEPROM này bao gồm:
+
+9 chân địa chỉ A0 đến A8 để xác định ô nhớ (tổng cộng 512 địa chỉ).
+
+8 chân dữ liệu I/O0 đến I/O7 dùng để truyền dữ liệu song song hai chiều.
+
+Tín hiệu điều khiển: CE (Chip Enable), OE (Output Enable), WE (Write Enable).
+
+Ghi dữ liệu vào EEPROM bao gồm các bước: đặt địa chỉ và dữ liệu tương ứng, kéo chân WE xuống mức thấp, sau đó đưa về mức cao. Trong khi đó, việc đọc dữ liệu yêu cầu đặt địa chỉ và kéo CE, OE xuống mức thấp; dữ liệu sau đó xuất hiện trên bus dữ liệu. Datasheet cũng cung cấp sơ đồ thời gian ghi (write timing), với các thông số như tWPH (write pulse high), tAS (address setup time), và cơ chế Data Polling thông qua bit I/O7.
+
+
+[ảnh]
+
+
+Chương 3: Thiết kế và triển khai
+3.1. Mo phong tren proteus, chan cua stm32 noi voi eepromn nhu nao
+3.2. Cấu hình cho các chân của stm32
+3.3. Viết các hàm thực hiện chức năng
+Chương 4: Kết quả và đánh giá
